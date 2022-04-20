@@ -13,9 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { UserEntity } from '@backstage/catalog-model';
-import { parseGitLabGroupUrl } from './groups';
+
+import {
+  ANNOTATION_LOCATION,
+  ANNOTATION_ORIGIN_LOCATION,
+  UserEntity,
+} from '@backstage/catalog-model';
 import { GitLabClient, paginated } from './client';
+import { parseGitLabGroupUrl } from './groups';
 import { GitLabUserResponse, UserTransformer } from './types';
 
 /**
@@ -23,7 +28,7 @@ import { GitLabUserResponse, UserTransformer } from './types';
  *
  * @public
  */
-export type UserIngestionOptions = {
+export type ReadUsersOptions = {
   inherited?: boolean;
   blocked?: boolean;
   transformer?: UserTransformer;
@@ -31,12 +36,10 @@ export type UserIngestionOptions = {
 
 /**
  * The default implementation to map a GitLab user response to a User entity.
- *
- * @public
  */
-export async function defaultUserTransformer(
+export function defaultUserTransformer(
   user: GitLabUserResponse,
-): Promise<UserEntity | undefined> {
+): UserEntity | undefined {
   if (user.bot) {
     return undefined;
   }
@@ -46,16 +49,29 @@ export async function defaultUserTransformer(
     kind: 'User',
     metadata: {
       name: user.username,
+      annotations: {
+        [ANNOTATION_LOCATION]: user.web_url,
+        [ANNOTATION_ORIGIN_LOCATION]: user.web_url,
+      },
     },
     spec: {
       profile: {},
       memberOf: [],
     },
   };
-  if (user.name) entity.spec.profile!.displayName = user.name;
-  if (user.avatar_url) entity.spec.profile!.picture = user.avatar_url;
-  if (user.public_email) entity.spec.profile!.email = user.public_email;
-  if (user.email) entity.spec.profile!.email = user.email;
+
+  if (user.name) {
+    entity.spec.profile!.displayName = user.name;
+  }
+  if (user.avatar_url) {
+    entity.spec.profile!.picture = user.avatar_url;
+  }
+  if (user.public_email) {
+    entity.spec.profile!.email = user.public_email;
+  }
+  if (user.email) {
+    entity.spec.profile!.email = user.email;
+  }
 
   return entity;
 }
@@ -63,12 +79,11 @@ export async function defaultUserTransformer(
 export async function getGroupMembers(
   client: GitLabClient,
   id: string,
-  options: UserIngestionOptions = {},
+  options: ReadUsersOptions = {},
 ): Promise<UserEntity[]> {
   const endpoint = `/groups/${encodeURIComponent(id)}/members${
     options.inherited ? '/all' : ''
   }`;
-  const transformer = options?.transformer ?? defaultUserTransformer;
   // TODO(minnsoe): perform a second /users/:id request to enrich and match instance users
   const members = paginated<GitLabUserResponse>(
     opts => client.pagedRequest(endpoint, opts),
@@ -77,49 +92,58 @@ export async function getGroupMembers(
 
   const memberUserEntities = [];
   for await (const result of members) {
-    const entity = await transformer(result);
-    if (!entity) {
-      continue;
+    const entity = options?.transformer
+      ? await options.transformer({
+          user: result,
+          defaultTransformer: defaultUserTransformer,
+        })
+      : defaultUserTransformer(result);
+    if (entity) {
+      memberUserEntities.push(entity);
     }
-    memberUserEntities.push(entity);
   }
+
   return memberUserEntities;
 }
 
 export async function getInstanceUsers(
   client: GitLabClient,
-  options: UserIngestionOptions = {},
+  options: ReadUsersOptions = {},
 ): Promise<UserEntity[]> {
   if (!client.isSelfManaged()) {
     throw new Error(
       'Getting all GitLab instance users is only supported for self-managed hosts.',
     );
   }
-  const transformer = options?.transformer ?? defaultUserTransformer;
+
   const users = paginated<GitLabUserResponse>(
     opts => client.pagedRequest('/users', opts),
     { active: true, per_page: 100 },
   );
+
   const userEntities = [];
   for await (const result of users) {
-    const entity = await transformer(result);
-    if (!entity) {
-      continue;
+    const entity = options?.transformer
+      ? await options.transformer({
+          user: result,
+          defaultTransformer: defaultUserTransformer,
+        })
+      : defaultUserTransformer(result);
+    if (entity) {
+      userEntities.push(entity);
     }
-    userEntities.push(entity);
   }
+
   return userEntities;
 }
 
 /**
  * Read users from a GitLab target and provides User entities.
- *
- * @public
  */
 export async function readUsers(
   client: GitLabClient,
   target: string,
-  options: UserIngestionOptions = {},
+  options: ReadUsersOptions = {},
 ): Promise<UserEntity[]> {
   const baseURL = new URL(client.baseUrl);
   const targetURL = new URL(target);
@@ -129,11 +153,11 @@ export async function readUsers(
     );
   }
 
-  const groupURL = parseGitLabGroupUrl(target, client.baseUrl);
-  if (!groupURL) {
+  const groupUrl = parseGitLabGroupUrl(target, client.baseUrl);
+  if (!groupUrl) {
     return getInstanceUsers(client, options);
   }
-  return getGroupMembers(client, groupURL, {
+  return getGroupMembers(client, groupUrl, {
     ...options,
     inherited: options?.inherited ?? true,
   });

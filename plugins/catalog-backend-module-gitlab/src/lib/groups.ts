@@ -13,9 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { GroupEntity, stringifyEntityRef } from '@backstage/catalog-model';
+
+import {
+  ANNOTATION_LOCATION,
+  ANNOTATION_ORIGIN_LOCATION,
+  GroupEntity,
+  stringifyEntityRef,
+} from '@backstage/catalog-model';
 import { trim } from 'lodash';
 import { GitLabClient, paginated } from './client';
+import { GitLabGroupResponse, GitLabSharedGroupResponse } from './types';
 import { getGroupMembers } from './users';
 
 export type GroupNode = {
@@ -26,63 +33,66 @@ export type GroupNode = {
 
 export type GroupAdjacency = Map<number, GroupNode>;
 
-type Group = {
-  id: number;
-  web_url: string;
-  name: string;
-  path: string;
-  description: string;
-  full_name: string;
-  full_path: string;
-  created_at: string;
-  parent_id: number | null;
-};
+/**
+ * The default implementation to map a GitLab group response to a Group entity.
+ */
+export function defaultUserTransformer(
+  group: GitLabGroupResponse,
+  options: { pathDelimiter: string; groupType: string },
+): GroupEntity | undefined {
+  const entity: GroupEntity = {
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'Group',
+    metadata: {
+      name: group.full_path.replaceAll('/', options.pathDelimiter),
+      annotations: {
+        [ANNOTATION_LOCATION]: group.web_url,
+        [ANNOTATION_ORIGIN_LOCATION]: group.web_url,
+      },
+    },
+    spec: {
+      type: options.groupType,
+      profile: {},
+      children: [],
+      members: [],
+    },
+  };
 
-type SharedGroup = {
-  group_id: number;
-  group_name: string;
-  group_full_path: string;
-  group_access_level: number;
-  expires_at?: string;
-};
+  if (group.name) {
+    entity.spec!.profile!.displayName = group.name;
+  }
+  if (group.description) {
+    entity.metadata!.description = group.description;
+  }
 
-export async function getGroups(
+  return entity;
+}
+
+export async function readGroups(
   client: GitLabClient,
   _id: string,
   pathDelimiter: string,
   groupType: string = 'team',
 ): Promise<GroupAdjacency> {
-  const groups = paginated<Group>(
+  const groups = paginated<GitLabGroupResponse>(
     options => client.pagedRequest('/groups', options),
     { per_page: 100 },
   );
 
   const groupAdjacency = new Map<number, GroupNode>();
   for await (const result of groups) {
-    const entity: GroupEntity = {
-      apiVersion: 'backstage.io/v1alpha1',
-      kind: 'Group',
-      metadata: {
-        name: result.full_path.replaceAll('/', pathDelimiter),
-      },
-      spec: {
-        type: groupType,
-        profile: {},
-        children: [],
-        members: [],
-      },
-    };
-    if (result.name) entity.spec!.profile!.displayName = result.name;
-    if (result.description) entity.metadata!.description = result.description;
-
-    if (!groupAdjacency.has(result.id)) {
-      groupAdjacency.set(result.id, {
-        children: [],
-        parent: result.parent_id,
-        entity,
-      });
+    const entity = defaultUserTransformer(result, { pathDelimiter, groupType });
+    if (entity) {
+      if (!groupAdjacency.has(result.id)) {
+        groupAdjacency.set(result.id, {
+          children: [],
+          parent: result.parent_id,
+          entity,
+        });
+      }
     }
   }
+
   await populateChildrenMembers(client, groupAdjacency);
   mapChildrenToEntityRefs(groupAdjacency);
   return groupAdjacency;
@@ -139,7 +149,7 @@ async function getSharedWithGroupsIDs(
   const response = await client.request(`/groups/${encodeURIComponent(id)}`);
   const { shared_with_groups } = await response.json();
   if (shared_with_groups) {
-    return shared_with_groups.map((group: SharedGroup) =>
+    return shared_with_groups.map((group: GitLabSharedGroupResponse) =>
       String(group.group_id),
     );
   }
@@ -152,12 +162,7 @@ function mapChildrenToEntityRefs(groupAdjacency: GroupAdjacency) {
     for (const child of children) {
       const childEntity = groupAdjacency.get(child)?.entity;
       if (childEntity) {
-        entity.spec!.children!.push(
-          stringifyEntityRef({
-            kind: 'group',
-            name: childEntity.metadata!.name,
-          }),
-        );
+        entity.spec!.children!.push(stringifyEntityRef(childEntity));
       }
     }
   }
@@ -166,37 +171,34 @@ function mapChildrenToEntityRefs(groupAdjacency: GroupAdjacency) {
 export function parseGitLabGroupUrl(
   url: string,
   baseUrl?: string,
-): null | string {
+): string | undefined {
   let path = getGroupPathComponents(url, baseUrl);
 
   // handle "/" pathname resulting in an array with the empty string
-  if (path.length < 1) {
-    return null; // no group path
+  if (!path.length) {
+    return undefined; // no group path
   }
 
-  if (path.length >= 1) {
-    // handle reserved groups keyword if present
-    if (path[0] === 'groups') {
-      path = path.slice(1);
-    }
-
-    // group path cannot be empty after /groups/
-    if (path.length === 0) {
-      throw new Error('GitLab group URL is missing a group path');
-    }
-
-    // consume each path component until /-/ which is used to delimit subpages
-    const components = [];
-    for (const component of path) {
-      if (component === '-') {
-        break;
-      }
-      components.push(component);
-    }
-    return components.join('/');
+  // handle reserved groups keyword if present
+  if (path[0] === 'groups') {
+    path = path.slice(1);
   }
 
-  throw new Error('GitLab group URL is invalid');
+  // group path cannot be empty after /groups/
+  if (!path.length) {
+    throw new Error('GitLab group URL is missing a group path');
+  }
+
+  // consume each path component until /-/ which is used to delimit sub-pages
+  const components = [];
+  for (const component of path) {
+    if (component === '-') {
+      break;
+    }
+    components.push(component);
+  }
+
+  return components.join('/');
 }
 
 export function getGroupPathComponents(

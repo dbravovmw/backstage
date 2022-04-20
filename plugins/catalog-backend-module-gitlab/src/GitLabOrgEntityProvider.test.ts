@@ -13,19 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import { getVoidLogger } from '@backstage/backend-common';
 import { ConfigReader } from '@backstage/config';
-
 import { GitLabOrgEntityProvider } from './GitLabOrgEntityProvider';
-import { readUsers, getGroups } from './lib';
+import { readGroups, readUsers } from './lib';
 
 jest.mock('./lib', () => {
   const actualGitLab = jest.requireActual('./lib');
   return {
     ...actualGitLab,
+    readGroups: jest.fn(),
     readUsers: jest.fn(),
     getInstanceUsers: jest.fn(),
-    getGroups: jest.fn(),
   };
 });
 
@@ -113,7 +113,7 @@ describe('GitLabOrgEntityProvider', () => {
       });
 
       await provider.read();
-      expect(getGroups).toBeCalled();
+      expect(readGroups).toBeCalled();
     });
   });
 });

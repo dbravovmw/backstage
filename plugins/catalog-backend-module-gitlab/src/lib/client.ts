@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import fetch, { RequestInit, Response } from 'node-fetch';
-import { merge } from 'lodash';
 import {
   getGitLabRequestOptions,
   GitLabIntegrationConfig,
 } from '@backstage/integration';
+import { merge } from 'lodash';
+import fetch, { RequestInit, Response } from 'node-fetch';
 import { Logger } from 'winston';
 
 export type ListOptions = {
@@ -99,7 +99,7 @@ export class GitLabClient {
    *
    * This method can be used to perform authenticated calls to any GitLab
    * endpoint against the configured GitLab instance. The underlying response is
-   * returned from fetch without modiication. Request options can be overriden
+   * returned from fetch without modification. Request options can be overridden
    * as they are merged to produce the final values; passed in values take
    * precedence.
    *

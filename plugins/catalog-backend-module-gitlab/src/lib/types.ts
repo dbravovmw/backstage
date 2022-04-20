@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { UserEntity } from '@backstage/catalog-model';
 
-export type GitLabProject = {
+import { GroupEntity, UserEntity } from '@backstage/catalog-model';
+
+export type GitLabProjectResponse = {
   id: number;
   default_branch?: string;
   archived: boolean;
@@ -24,10 +25,9 @@ export type GitLabProject = {
 };
 
 /**
- * GitLab API User Repsonse
+ * GitLab API User Response
  *
  * https://docs.gitlab.com/ee/api/users.html#for-user.
- * @public
  */
 export type GitLabUserResponse = {
   id: number;
@@ -52,11 +52,42 @@ export type GitLabUserResponse = {
   following?: number;
 };
 
+export type GitLabGroupResponse = {
+  id: number;
+  web_url: string;
+  name: string;
+  path: string;
+  description: string;
+  full_name: string;
+  full_path: string;
+  created_at: string;
+  parent_id: number | null;
+};
+
+export type GitLabSharedGroupResponse = {
+  group_id: number;
+  group_name: string;
+  group_full_path: string;
+  group_access_level: number;
+  expires_at?: string;
+};
+
 /**
  * Transformer to map a GitLab user response to a User entity.
  *
  * @public
  */
-export type UserTransformer = (
-  user: GitLabUserResponse,
-) => Promise<UserEntity | undefined>;
+export type UserTransformer = (options: {
+  user: GitLabUserResponse;
+  defaultTransformer: (user: GitLabUserResponse) => UserEntity | undefined;
+}) => Promise<UserEntity | undefined>;
+
+/**
+ * Transformer to map a GitLab group response to a Group entity.
+ *
+ * @public
+ */
+export type GroupTransformer = (options: {
+  group: unknown;
+  defaultTransformer: (group: unknown) => GroupEntity | undefined;
+}) => Promise<GroupEntity | undefined>;

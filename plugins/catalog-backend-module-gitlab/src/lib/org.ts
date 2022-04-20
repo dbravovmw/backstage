@@ -15,34 +15,30 @@
  */
 
 export function parseGitLabGroupUrl(url: string): null | string {
-  let path = new URL(url).pathname.substr(1).split('/');
+  let path = new URL(url).pathname.substring(1).split('/');
 
   // handle "/" pathname resulting in an array with the empty string
   if (path.length === 1 && path[0].length === 0) {
     return null; // no group path
+  } else if (path.length < 1) {
+    throw new Error('GitLab group URL is invalid');
   }
 
-  if (path.length >= 1) {
-    // handle reserved groups keyword if present
-    if (path[0] === 'groups') {
-      path = path.slice(1);
-    }
-
-    // group path cannot be empty after /groups/
-    if (path.length === 0) {
-      throw new Error('GitLab group URL is missing a group path');
-    }
-
-    // consume each path component until /-/ which is used to delimit subpages
-    const components = [];
-    for (const component of path) {
-      if (component === '-') {
-        break;
-      }
-      components.push(component);
-    }
-    return components.join('/');
+  // handle reserved groups keyword if present
+  if (path[0] === 'groups') {
+    path = path.slice(1);
   }
 
-  throw new Error('GitLab group URL is invalid');
+  // group path cannot be empty after /groups/
+  if (path.length === 0) {
+    throw new Error('GitLab group URL is missing a group path');
+  }
+
+  // keep up until /-/ which is used to delimit sub-pages
+  const dashIndex = path.findIndex(s => s === '-');
+  if (dashIndex) {
+    path = path.slice(0, dashIndex);
+  }
+
+  return path.join('/');
 }

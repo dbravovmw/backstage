@@ -22,5 +22,5 @@
 
 export { GitLabDiscoveryProcessor } from './GitLabDiscoveryProcessor';
 export { GitLabOrgEntityProvider } from './GitLabOrgEntityProvider';
-
-export type { UserTransformer } from './lib';
+export type { GitLabOrgEntityProviderOptions } from './GitLabOrgEntityProvider';
+export type { GroupTransformer, UserTransformer } from './lib';

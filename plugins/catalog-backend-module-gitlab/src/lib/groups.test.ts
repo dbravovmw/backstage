@@ -13,21 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { ConfigReader } from '@backstage/config';
-import { setupRequestMockHandlers } from '@backstage/backend-test-utils';
-import { readGitLabIntegrationConfig } from '@backstage/integration';
+
 import { getVoidLogger } from '@backstage/backend-common';
+import { setupRequestMockHandlers } from '@backstage/backend-test-utils';
 import { stringifyEntityRef } from '@backstage/catalog-model';
+import { ConfigReader } from '@backstage/config';
+import { readGitLabIntegrationConfig } from '@backstage/integration';
 import { rest } from 'msw';
 import { setupServer, SetupServerApi } from 'msw/node';
 import { GitLabClient } from './client';
 import {
-  parseGitLabGroupUrl,
   getGroupPathComponents,
-  getGroups,
-  populateChildrenMembers,
   GroupAdjacency,
   GroupNode,
+  parseGitLabGroupUrl,
+  populateChildrenMembers,
+  readGroups,
 } from './groups';
 
 const server = setupServer();
@@ -170,14 +171,14 @@ beforeEach(() => {
   setupFakeInstanceGroups(server);
 });
 
-describe('getGroups', () => {
+describe('readGroups', () => {
   it('should map the group response to group entity, parent and children adjacency', async () => {
     const client = new GitLabClient({
       config: MOCK_CONFIG,
       logger: getVoidLogger(),
     });
 
-    const groupAdjacency = await getGroups(client, '', '.');
+    const groupAdjacency = await readGroups(client, '', '.');
     expect(groupAdjacency.size).toEqual(3);
     expect(groupAdjacency.get(1)?.entity?.spec?.children).toHaveLength(1);
     expect(groupAdjacency.get(1)?.entity?.spec?.children).toContain(
@@ -194,7 +195,7 @@ describe('getGroups', () => {
       logger: getVoidLogger(),
     });
 
-    const groupAdjacency = await getGroups(client, '', '.');
+    const groupAdjacency = await readGroups(client, '', '.');
     const groupEntity = groupAdjacency.get(1)?.entity;
 
     expect(groupEntity).toHaveProperty('metadata.name', 'alpha');
@@ -211,13 +212,13 @@ describe('getGroups', () => {
       logger: getVoidLogger(),
     });
 
-    const groupAdjacencyPeriod = await getGroups(client, '', '.');
+    const groupAdjacencyPeriod = await readGroups(client, '', '.');
     expect(groupAdjacencyPeriod.get(2)?.entity).toHaveProperty(
       'metadata.name',
       'alpha.one',
     );
 
-    const groupAdjacencyUnderscore = await getGroups(client, '', '_');
+    const groupAdjacencyUnderscore = await readGroups(client, '', '_');
     expect(groupAdjacencyUnderscore.get(2)?.entity).toHaveProperty(
       'metadata.name',
       'alpha_one',
