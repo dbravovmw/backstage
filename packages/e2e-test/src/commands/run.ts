@@ -65,7 +65,7 @@ export async function run() {
   const appConfig = path.resolve(appDir, 'app-config.yaml');
   if (Boolean(process.env.POSTGRES_USER)) {
     print('Testing the PostgreSQL backend startup');
-    await preCleanPostgres();
+    // await preCleanPostgres();
     const productionConfig = path.resolve(appDir, 'app-config.production.yaml');
     await testBackendStart(
       appDir,
