@@ -52,7 +52,9 @@ export interface Config {
             /** @visibility secret  */
             serviceAccountToken?: string;
             /** @visibility frontend */
-            authProvider: 'aws' | 'google' | 'serviceAccount';
+            authProvider: 'aws' | 'google' | 'serviceAccount' | 'oidc';
+            /** @visibility frontend */
+            oidcTokenProvider?: string;
             /** @visibility frontend */
             skipTLSVerify?: boolean;
           }>;

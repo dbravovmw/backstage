@@ -61,6 +61,11 @@ export class ConfigClusterLocator implements KubernetesClustersSupplier {
 
             return { assumeRole, externalId, ...clusterDetails };
           }
+          case 'oidc': {
+            const oidcTokenProvider = c.getString('oidcTokenProvider');
+
+            return { oidcTokenProvider, ...clusterDetails };
+          }
           case 'serviceAccount': {
             return clusterDetails;
           }
